@@ -366,7 +366,7 @@
     function flipCard() {
         document.getElementById("card").classList.toggle("flipped");
     }
-    function speakWord(event) {
+        function speakWord(event) {
         event.stopPropagation();
         if (currentIndex < 0) return;
         const word = cards[currentIndex].word;
@@ -376,6 +376,37 @@
         const utterance = new SpeechSynthesisUtterance(word);
         utterance.lang = "es-ES";
         utterance.rate = 0.85;
+
+        // 优先选择高质量语音
+        const voices = window.speechSynthesis.getVoices();
+        if (voices.length === 0) {
+            // 部分浏览器需要延迟获取语音列表
+            window.speechSynthesis.onvoiceschanged = () => {
+                const updatedVoices = window.speechSynthesis.getVoices();
+                setBestVoice(utterance, updatedVoices);
+                speak(utterance, btn);
+            };
+            return;
+        }
+        setBestVoice(utterance, voices);
+        speak(utterance, btn);
+    }
+
+    function setBestVoice(utterance, voices) {
+        // iOS: Mónica 声音最自然
+        let best = voices.find(v => v.lang.startsWith("es-ES") && v.name.includes("Mónica"))
+                // macOS: Mónica 或 Jorge
+                || voices.find(v => v.lang.startsWith("es-ES") && v.name.includes("Jorge"))
+                // Android: Google 西班牙语
+                || voices.find(v => v.lang.startsWith("es-ES") && v.name.includes("Google"))
+                // 通用：es-ES 任意高质量语音
+                || voices.find(v => v.lang === "es-ES" && v.localService === true)
+                // 兜底：任意 es-ES
+                || voices.find(v => v.lang.startsWith("es-ES"));
+        if (best) utterance.voice = best;
+    }
+
+    function speak(utterance, btn) {
         btn.classList.add("speaking");
         utterance.onend = () => btn.classList.remove("speaking");
         utterance.onerror = () => btn.classList.remove("speaking");
