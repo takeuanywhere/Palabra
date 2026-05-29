@@ -366,52 +366,28 @@
     function flipCard() {
         document.getElementById("card").classList.toggle("flipped");
     }
-        function speakWord(event) {
+    
+    // 更新为 Google TTS 接口
+    function speakWord(event) {
         event.stopPropagation();
         if (currentIndex < 0) return;
+        
         const word = cards[currentIndex].word;
         const btn = document.getElementById("speakBtn");
-        if (!('speechSynthesis' in window)) { alert("浏览器不支持发音"); return; }
-        window.speechSynthesis.cancel();
-        const utterance = new SpeechSynthesisUtterance(word);
-        utterance.lang = "es-ES";
-        utterance.rate = 0.85;
-
-        // 优先选择高质量语音
-        const voices = window.speechSynthesis.getVoices();
-        if (voices.length === 0) {
-            // 部分浏览器需要延迟获取语音列表
-            window.speechSynthesis.onvoiceschanged = () => {
-                const updatedVoices = window.speechSynthesis.getVoices();
-                setBestVoice(utterance, updatedVoices);
-                speak(utterance, btn);
-            };
-            return;
-        }
-        setBestVoice(utterance, voices);
-        speak(utterance, btn);
-    }
-
-    function setBestVoice(utterance, voices) {
-        // iOS: Mónica 声音最自然
-        let best = voices.find(v => v.lang.startsWith("es-ES") && v.name.includes("Mónica"))
-                // macOS: Mónica 或 Jorge
-                || voices.find(v => v.lang.startsWith("es-ES") && v.name.includes("Jorge"))
-                // Android: Google 西班牙语
-                || voices.find(v => v.lang.startsWith("es-ES") && v.name.includes("Google"))
-                // 通用：es-ES 任意高质量语音
-                || voices.find(v => v.lang === "es-ES" && v.localService === true)
-                // 兜底：任意 es-ES
-                || voices.find(v => v.lang.startsWith("es-ES"));
-        if (best) utterance.voice = best;
-    }
-
-    function speak(utterance, btn) {
+        
+        const audioUrl = `https://translate.google.com/translate_tts?ie=UTF-8&tl=es&client=tw-ob&q=${encodeURIComponent(word)}`;
+        const audio = new Audio(audioUrl);
+        
         btn.classList.add("speaking");
-        utterance.onend = () => btn.classList.remove("speaking");
-        utterance.onerror = () => btn.classList.remove("speaking");
-        window.speechSynthesis.speak(utterance);
+        audio.play();
+        
+        audio.onended = () => btn.classList.remove("speaking");
+        audio.onerror = () => {
+            btn.classList.remove("speaking");
+            alert("发音获取失败，请检查网络");
+        };
     }
+
     function rateCard(grade) {
         if (currentIndex < 0) return;
         const card = cards[currentIndex];
