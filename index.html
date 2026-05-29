@@ -4,6 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>🇪🇸 西语小卡片 · 间隔记忆</title>
+    <link rel="apple-touch-icon" sizes="180x180" href="https://cdn.jsdelivr.net/gh/twitter/twemoji@latest/assets/svg/1f1ea-1f1f8.svg">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="西语卡片">
     <style>
         :root {
             --bg: #f8f9fc;
@@ -154,7 +157,22 @@
             color: #c0c0d0;
         }
         .card.flipped .tap-hint { display: none; }
-        .buttons { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+        .buttons {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            flex-wrap: wrap;
+            max-height: 0;
+            overflow: hidden;
+            opacity: 0;
+            transition: max-height 0.4s ease, opacity 0.3s ease, margin-top 0.3s ease;
+            margin-top: 0;
+        }
+        .buttons.visible {
+            max-height: 80px;
+            opacity: 1;
+            margin-top: 16px;
+        }
         button {
             padding: 14px 18px;
             border: none;
@@ -252,7 +270,7 @@
             <div class="tap-hint">👆 点击翻看</div>
         </div>
     </div>
-    <div class="buttons">
+    <div class="buttons" id="buttons">
         <button class="btn-again" onclick="rateCard('again')">🔴 忘了</button>
         <button class="btn-hard" onclick="rateCard('hard')">🟡 模糊</button>
         <button class="btn-good" onclick="rateCard('good')">🟢 秒答</button>
@@ -339,6 +357,7 @@
             document.getElementById("intervalBadge").textContent = "";
             document.getElementById("card").classList.remove("flipped");
             document.getElementById("speakBtn").style.display = "none";
+            document.getElementById("buttons").classList.remove("visible");
             currentIndex = -1;
             return;
         }
@@ -350,6 +369,7 @@
         document.getElementById("example").textContent = card.example || "";
         document.getElementById("card").classList.remove("flipped");
         document.getElementById("speakBtn").style.display = "inline-flex";
+        document.getElementById("buttons").classList.remove("visible");
         if (card.rescue) {
             document.getElementById("intervalBadge").textContent = "🚑 急救";
         } else if (card.interval < 60) {
@@ -362,29 +382,47 @@
         document.getElementById("cardWrapper").classList.remove("slide-up");
         void document.getElementById("cardWrapper").offsetWidth;
         document.getElementById("cardWrapper").classList.add("slide-up");
+        
+        speakWordAuto();
     }
     function flipCard() {
-        document.getElementById("card").classList.toggle("flipped");
+        const card = document.getElementById("card");
+        card.classList.toggle("flipped");
+        if (card.classList.contains("flipped")) {
+            document.getElementById("buttons").classList.add("visible");
+        } else {
+            document.getElementById("buttons").classList.remove("visible");
+        }
     }
-    
-    // 更新为 Google TTS 接口
+
     function speakWord(event) {
         event.stopPropagation();
         if (currentIndex < 0) return;
-        
         const word = cards[currentIndex].word;
         const btn = document.getElementById("speakBtn");
-        
-        const audioUrl = `https://translate.google.com/translate_tts?ie=UTF-8&tl=es&client=tw-ob&q=${encodeURIComponent(word)}`;
-        const audio = new Audio(audioUrl);
-        
+        playAudio(word, btn);
+    }
+
+    function speakWordAuto() {
+        if (currentIndex < 0) return;
+        const word = cards[currentIndex].word;
+        const btn = document.getElementById("speakBtn");
+        playAudio(word, btn);
+    }
+
+    function playAudio(word, btn) {
+        const baiduUrl = `https://fanyi.baidu.com/gettts?lan=es&text=${encodeURIComponent(word)}&spd=3&source=web`;
+        const audio = new Audio(baiduUrl);
         btn.classList.add("speaking");
         audio.play();
-        
         audio.onended = () => btn.classList.remove("speaking");
         audio.onerror = () => {
             btn.classList.remove("speaking");
-            alert("发音获取失败，请检查网络");
+            const youdaoUrl = `https://dict.youdao.com/dictvoice?audio=${encodeURIComponent(word)}&le=es`;
+            const audio2 = new Audio(youdaoUrl);
+            audio2.play();
+            audio2.onended = () => btn.classList.remove("speaking");
+            audio2.onerror = () => btn.classList.remove("speaking");
         };
     }
 
