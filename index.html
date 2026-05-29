@@ -1,102 +1,475 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Palabra - 西语记忆魔方</title>
-    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🇪🇸 西语小卡片 · 间隔记忆</title>
     <style>
-        body { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
-        .card-container { perspective: 1000px; }
-        .card-inner { transition: transform 0.6s; transform-style: preserve-3d; }
-        .card-flipped { transform: rotateY(180deg); }
-        .card-front, .card-back { backface-visibility: hidden; position: absolute; width: 100%; height: 100%; }
-        .card-back { transform: rotateY(180deg); }
-        .duo-btn { transition: all 0.1s ease; border-bottom: 4px solid; }
-        .duo-btn:active { border-bottom-width: 0px; transform: translateY(4px); }
+        :root {
+            --bg: #f8f9fc;
+            --card-bg: #ffffff;
+            --primary: #58cc02;
+            --secondary: #ff9600;
+            --text: #2d3142;
+            --sub: #8e8ea0;
+            --border: #e8e8ef;
+            --shadow: 0 4px 20px rgba(0,0,0,0.06);
+            --radius: 24px;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Nunito', 'Segoe UI', system-ui, sans-serif;
+            background: var(--bg);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 16px;
+        }
+        .container { max-width: 460px; width: 100%; }
+        .header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 12px;
+            padding: 0 8px;
+        }
+        .header .logo { font-size: 22px; font-weight: 800; color: var(--text); }
+        .header .streak {
+            background: #fff;
+            border-radius: 20px;
+            padding: 6px 14px;
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--secondary);
+            box-shadow: 0 2px 8px rgba(255,149,0,0.12);
+        }
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: #e8e8ef;
+            border-radius: 10px;
+            margin-bottom: 16px;
+            overflow: hidden;
+        }
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #58cc02, #7cd636);
+            border-radius: 10px;
+            transition: width 0.4s ease;
+        }
+        .card-wrapper { perspective: 800px; margin-bottom: 16px; }
+        .card {
+            background: var(--card-bg);
+            border-radius: var(--radius);
+            padding: 40px 24px;
+            min-height: 280px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            box-shadow: var(--shadow);
+            transition: transform 0.3s, box-shadow 0.3s;
+            text-align: center;
+            position: relative;
+            border: 2px solid transparent;
+            user-select: none;
+        }
+        .card:active { transform: scale(0.97); }
+        .card.flipped {
+            border-color: #e0e0ff;
+            box-shadow: 0 8px 30px rgba(88,86,214,0.10);
+        }
+        .card .interval-badge {
+            position: absolute;
+            top: 14px;
+            right: 16px;
+            font-size: 11px;
+            color: var(--sub);
+            background: #f0f0f8;
+            padding: 3px 10px;
+            border-radius: 10px;
+            font-weight: 600;
+        }
+        .card .word {
+            font-size: 36px;
+            font-weight: 800;
+            color: #4a4ad0;
+            transition: all 0.3s;
+        }
+        .card.flipped .word { font-size: 26px; color: #6a6ad0; }
+        .card .pos {
+            font-size: 13px;
+            color: var(--sub);
+            margin-top: 6px;
+            background: #f0f0f8;
+            padding: 3px 12px;
+            border-radius: 12px;
+        }
+        .speak-btn {
+            margin-top: 14px;
+            padding: 8px 16px;
+            background: #f0f0ff;
+            border: none;
+            border-radius: 16px;
+            font-size: 15px;
+            cursor: pointer;
+            color: #4a4ad0;
+            font-weight: 700;
+            transition: all 0.2s;
+            box-shadow: 0 2px 8px rgba(74,74,208,0.10);
+        }
+        .speak-btn:hover { background: #e0e0ff; }
+        .speak-btn:active { transform: scale(0.94); }
+        .speak-btn.speaking { background: #4a4ad0; color: white; }
+        .card .divider {
+            width: 40px;
+            height: 3px;
+            background: #e8e8f0;
+            border-radius: 2px;
+            margin: 16px 0;
+            display: none;
+        }
+        .card.flipped .divider { display: block; }
+        .card .meaning {
+            font-size: 24px;
+            font-weight: 700;
+            color: var(--text);
+            display: none;
+        }
+        .card.flipped .meaning { display: block; }
+        .card .example {
+            font-size: 14px;
+            color: #6a6a90;
+            margin-top: 10px;
+            font-style: italic;
+            display: none;
+        }
+        .card.flipped .example { display: block; }
+        .card .tap-hint {
+            position: absolute;
+            bottom: 12px;
+            font-size: 11px;
+            color: #c0c0d0;
+        }
+        .card.flipped .tap-hint { display: none; }
+        .buttons { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+        button {
+            padding: 14px 18px;
+            border: none;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s;
+            letter-spacing: 0.3px;
+            box-shadow: 0 3px 12px rgba(0,0,0,0.08);
+        }
+        button:active { transform: scale(0.95); }
+        .btn-again { background: #fff; color: #ff4b4b; border: 2px solid #ffe0e0; }
+        .btn-again:hover { background: #fff5f5; }
+        .btn-hard { background: #fff; color: #ff9600; border: 2px solid #ffe8cc; }
+        .btn-hard:hover { background: #fffaf3; }
+        .btn-good { background: #58cc02; color: white; box-shadow: 0 4px 16px rgba(88,204,2,0.25); }
+        .btn-good:hover { background: #4ab800; }
+        .stats {
+            text-align: center;
+            color: var(--sub);
+            font-size: 13px;
+            margin-top: 14px;
+            font-weight: 600;
+            display: flex;
+            justify-content: center;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+        .import-section {
+            margin-top: 18px;
+            background: #fff;
+            border-radius: 20px;
+            padding: 18px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.03);
+        }
+        .import-section h3 {
+            font-size: 15px;
+            color: var(--text);
+            margin-bottom: 10px;
+        }
+        .import-section textarea {
+            width: 100%;
+            height: 100px;
+            padding: 12px 14px;
+            border-radius: 14px;
+            border: 2px solid #e8e8ef;
+            background: #f8f9fc;
+            font-size: 12px;
+            color: var(--text);
+            resize: vertical;
+            font-family: 'Courier New', monospace;
+        }
+        .import-section textarea:focus {
+            outline: none;
+            border-color: #58cc02;
+            background: #fff;
+        }
+        .import-section textarea::placeholder { color: #b0b0c0; font-family: 'Nunito', sans-serif; }
+        .import-row { display: flex; gap: 8px; margin-top: 8px; }
+        .import-row button { flex: 1; padding: 10px; border-radius: 14px; font-size: 13px; }
+        .btn-import { background: #58cc02; color: white; box-shadow: 0 3px 12px rgba(88,204,2,0.20); }
+        .btn-reset { background: #fff; color: #8e8ea0; border: 2px solid #e8e8ef; }
+        .btn-export { background: #4a4ad0; color: white; box-shadow: 0 3px 12px rgba(74,74,208,0.15); }
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .slide-up { animation: slideUp 0.35s ease; }
+        @media (max-width: 400px) {
+            .card { padding: 30px 18px; min-height: 240px; }
+            .card .word { font-size: 28px; }
+            button { padding: 10px 12px; font-size: 12px; }
+        }
     </style>
 </head>
-<body class="bg-[#f7f7f7] font-sans flex flex-col items-center p-4 min-h-screen">
-
-    <header class="w-full max-w-md flex justify-between items-center py-4 border-b-2 border-[#e5e5e5] mb-8">
-        <span class="text-xl font-black text-[#58cc02]">🦉 Palabra</span>
-        <span class="text-sm font-bold text-[#afafaf]">待复习: <span id="count" class="text-[#ff9600]">0</span></span>
-    </header>
-
-    <main class="w-full max-w-md">
-        <div class="card-container w-full aspect-[4/3] cursor-pointer mb-6" onclick="flip()">
-            <div id="card" class="card-inner w-full h-full relative">
-                <div class="card-front bg-white border-2 border-[#e5e5e5] rounded-2xl p-6 flex flex-col justify-center items-center shadow-sm">
-                    <h2 id="f-word" class="text-4xl font-black">欢迎使用</h2>
-                    <p class="text-xs text-[#afafaf] mt-4">点击翻转卡片</p>
-                </div>
-                <div class="card-back bg-white border-2 border-[#58cc02] rounded-2xl p-6 flex flex-col justify-center items-center shadow-sm text-center">
-                    <p id="b-meaning" class="text-xs font-bold text-[#58cc02] bg-[#e5ffcf] px-2 py-1 rounded mb-2"></p>
-                    <p id="b-example" class="italic text-lg font-medium mb-1"></p>
-                    <p id="b-trans" class="text-sm text-[#777]"></p>
-                </div>
-            </div>
+<body>
+<div class="container">
+    <div class="header">
+        <div class="logo">🇪🇸 西语小卡片</div>
+        <div class="streak">🔥 <span id="streakCount">1</span> 天</div>
+    </div>
+    <div class="progress-bar">
+        <div class="progress-fill" id="progressFill" style="width: 0%;"></div>
+    </div>
+    <div class="card-wrapper slide-up" id="cardWrapper">
+        <div class="card" id="card" onclick="flipCard()">
+            <div class="interval-badge" id="intervalBadge"></div>
+            <div class="word" id="word"></div>
+            <div class="pos" id="pos"></div>
+            <button class="speak-btn" id="speakBtn" onclick="speakWord(event)">🔊 发音</button>
+            <div class="divider"></div>
+            <div class="meaning" id="meaning"></div>
+            <div class="example" id="example"></div>
+            <div class="tap-hint">👆 点击翻看</div>
         </div>
-
-        <div id="controls" class="grid grid-cols-3 gap-2 hidden">
-            <button onclick="grade(0)" class="duo-btn bg-[#ff4b4b] border-[#b33333] text-white font-bold py-3 rounded-xl text-sm">再记</button>
-            <button onclick="grade(1)" class="duo-btn bg-[#ffc800] border-[#b89100] text-white font-bold py-3 rounded-xl text-sm">模糊</button>
-            <button onclick="grade(2)" class="duo-btn bg-[#58cc02] border-[#46a302] text-white font-bold py-3 rounded-xl text-sm">秒答</button>
+    </div>
+    <div class="buttons">
+        <button class="btn-again" onclick="rateCard('again')">🔴 忘了</button>
+        <button class="btn-hard" onclick="rateCard('hard')">🟡 模糊</button>
+        <button class="btn-good" onclick="rateCard('good')">🟢 秒答</button>
+    </div>
+    <div class="stats">
+        <span>📚 待复习: <span id="dueCount">0</span></span>
+        <span>📝 总计: <span id="totalCount">0</span></span>
+        <span>🚑 急救: <span id="rescueCount">0</span></span>
+    </div>
+    <div class="import-section">
+        <h3>📥 导入今日单词 (JSON)</h3>
+        <textarea id="jsonInput" placeholder='粘贴 JSON 代码'></textarea>
+        <div class="import-row">
+            <button class="btn-import" onclick="importJSON()">📥 导入并合并</button>
+            <button class="btn-export" onclick="downloadBackup()">📤 下载备份</button>
+            <button class="btn-reset" onclick="resetCards()">🔁 重置</button>
         </div>
-    </main>
-
-    <footer class="w-full max-w-md mt-10 bg-white p-4 rounded-xl border border-[#e5e5e5]">
-        <h3 class="text-sm font-bold mb-2">📥 数据管理</h3>
-        <textarea id="import-area" class="w-full text-xs p-2 border rounded mb-2 h-16" placeholder="粘贴 JSON..."></textarea>
-        <div class="grid grid-cols-2 gap-2">
-            <button onclick="importWord()" class="bg-[#1cb0f6] text-white font-bold py-2 rounded-xl text-sm">导入/同步</button>
-            <button onclick="exportData()" class="bg-[#e5e5e5] text-[#777] font-bold py-2 rounded-xl text-sm">导出数据</button>
-        </div>
-    </footer>
-
-    <script>
-        let deck = JSON.parse(localStorage.getItem('myDeck') || '[]');
-        function updateUI() {
-            const now = new Date().getTime();
-            const due = deck.filter(c => c.nextReview <= now);
-            document.getElementById('count').innerText = due.length;
-            if (due.length > 0) {
-                const c = due[0];
-                document.getElementById('f-word').innerText = c.word;
-                document.getElementById('b-meaning').innerText = c.pos + " " + c.meaning;
-                document.getElementById('b-example').innerText = c.example;
-                document.getElementById('b-trans').innerText = c.translation;
-            } else {
-                document.getElementById('f-word').innerText = "学习完毕！";
+    </div>
+</div>
+<script>
+    const defaultCards = [
+        { word: "abierta", pos: "adj. / p.p.", meaning: "开着的", example: "La puerta está abierta." },
+        { word: "cansado", pos: "adj. / p.p.", meaning: "累的", example: "Estoy muy cansado." },
+        { word: "puerta", pos: "f.", meaning: "门", example: "Cierra la puerta." },
+        { word: "cielo", pos: "m.", meaning: "天空", example: "El cielo está azul." },
+        { word: "gato", pos: "m.", meaning: "猫", example: "Tengo dos gatos." },
+    ];
+    let cards = [];
+    let currentIndex = 0;
+    let streakDays = 1;
+    let rescuePool = [];
+    function save() {
+        localStorage.setItem("ankiSM2_cards", JSON.stringify(cards));
+        localStorage.setItem("ankiSM2_streakDays", streakDays);
+        localStorage.setItem("ankiSM2_lastDate", new Date().toDateString());
+    }
+    function load() {
+        const saved = localStorage.getItem("ankiSM2_cards");
+        if (saved) {
+            const parsed = JSON.parse(saved);
+            if (parsed.length > 0) cards = parsed;
+            else cards = defaultCards.map(c => ({...c, interval: 0, due: Date.now(), rescue: false}));
+        } else {
+            cards = defaultCards.map(c => ({...c, interval: 0, due: Date.now(), rescue: false}));
+        }
+        streakDays = parseInt(localStorage.getItem("ankiSM2_streakDays")) || 1;
+        const last = localStorage.getItem("ankiSM2_lastDate");
+        const today = new Date().toDateString();
+        if (last && last !== today) {
+            const yesterday = new Date(Date.now() - 86400000).toDateString();
+            if (last === yesterday) streakDays++;
+            else streakDays = 1;
+        }
+        if (!last) streakDays = 1;
+        save();
+    }
+    function getDueIndices() {
+        const now = Date.now();
+        const due = [];
+        rescuePool = [];
+        cards.forEach((card, i) => {
+            if (card.due <= now) {
+                if (card.rescue) rescuePool.push(i);
+                due.push(i);
+            }
+        });
+        return due;
+    }
+    function show() {
+        const due = getDueIndices();
+        document.getElementById("dueCount").textContent = due.length;
+        document.getElementById("totalCount").textContent = cards.length;
+        document.getElementById("rescueCount").textContent = rescuePool.length;
+        document.getElementById("streakCount").textContent = streakDays;
+        const total = cards.length;
+        const reviewed = total > 0 ? cards.filter(c => c.interval > 0).length : 0;
+        const pct = total > 0 ? Math.round((reviewed / total) * 100) : 0;
+        document.getElementById("progressFill").style.width = pct + "%";
+        if (due.length === 0) {
+            document.getElementById("word").textContent = "🎉 暂无待复习";
+            document.getElementById("pos").textContent = "";
+            document.getElementById("meaning").textContent = "";
+            document.getElementById("example").textContent = "";
+            document.getElementById("intervalBadge").textContent = "";
+            document.getElementById("card").classList.remove("flipped");
+            document.getElementById("speakBtn").style.display = "none";
+            currentIndex = -1;
+            return;
+        }
+        currentIndex = due[0];
+        const card = cards[currentIndex];
+        document.getElementById("word").textContent = card.word;
+        document.getElementById("pos").textContent = card.pos || "";
+        document.getElementById("meaning").textContent = card.meaning;
+        document.getElementById("example").textContent = card.example || "";
+        document.getElementById("card").classList.remove("flipped");
+        document.getElementById("speakBtn").style.display = "inline-flex";
+        if (card.rescue) {
+            document.getElementById("intervalBadge").textContent = "🚑 急救";
+        } else if (card.interval < 60) {
+            document.getElementById("intervalBadge").textContent = card.interval + "分钟";
+        } else if (card.interval < 1440) {
+            document.getElementById("intervalBadge").textContent = Math.round(card.interval / 60) + "小时";
+        } else {
+            document.getElementById("intervalBadge").textContent = Math.round(card.interval / 1440) + "天";
+        }
+        document.getElementById("cardWrapper").classList.remove("slide-up");
+        void document.getElementById("cardWrapper").offsetWidth;
+        document.getElementById("cardWrapper").classList.add("slide-up");
+    }
+    function flipCard() {
+        document.getElementById("card").classList.toggle("flipped");
+    }
+    function speakWord(event) {
+        event.stopPropagation();
+        if (currentIndex < 0) return;
+        const word = cards[currentIndex].word;
+        const btn = document.getElementById("speakBtn");
+        if (!('speechSynthesis' in window)) { alert("浏览器不支持发音"); return; }
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(word);
+        utterance.lang = "es-ES";
+        utterance.rate = 0.85;
+        btn.classList.add("speaking");
+        utterance.onend = () => btn.classList.remove("speaking");
+        utterance.onerror = () => btn.classList.remove("speaking");
+        window.speechSynthesis.speak(utterance);
+    }
+    function rateCard(grade) {
+        if (currentIndex < 0) return;
+        const card = cards[currentIndex];
+        const now = Date.now();
+        if (grade === "again") {
+            card.interval = 5;
+            card.due = now + 5 * 60 * 1000;
+            card.rescue = true;
+        } else if (grade === "hard") {
+            if (card.interval === 0) card.interval = 5;
+            card.interval = Math.round(card.interval * 1.2);
+            card.due = now + card.interval * 60 * 1000;
+            card.rescue = false;
+        } else if (grade === "good") {
+            if (card.interval === 0) card.interval = 10;
+            card.interval = Math.round(card.interval * 2.5);
+            card.due = now + card.interval * 60 * 1000;
+            card.rescue = false;
+        }
+        save();
+        show();
+    }
+    function importJSON() {
+        const raw = document.getElementById("jsonInput").value.trim();
+        if (!raw) { alert("请粘贴 JSON 代码"); return; }
+        let imported;
+        try { imported = JSON.parse(raw); } catch (e) { alert("JSON 格式错误，请检查"); return; }
+        if (!Array.isArray(imported)) { alert("JSON 必须是数组格式"); return; }
+        let added = 0;
+        const now = Date.now();
+        imported.forEach(item => {
+            if (!item.word || !item.meaning) return;
+            const exists = cards.some(c => c.word.toLowerCase() === item.word.toLowerCase());
+            if (exists) return;
+            cards.push({
+                word: item.word,
+                pos: item.pos || "",
+                meaning: item.meaning,
+                example: item.example || "",
+                interval: 0,
+                due: now,
+                rescue: false
+            });
+            added++;
+        });
+        save();
+        show();
+        document.getElementById("jsonInput").value = "";
+        alert("已导入 " + added + " 个新单词");
+    }
+    function downloadBackup() {
+        const exportData = cards.map(c => ({
+            word: c.word,
+            pos: c.pos,
+            meaning: c.meaning,
+            example: c.example,
+            interval: c.interval,
+            due: c.due,
+            rescue: c.rescue
+        }));
+        const jsonStr = JSON.stringify(exportData, null, 2);
+        const blob = new Blob([jsonStr], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "西语卡片备份_" + new Date().toISOString().slice(0,10) + ".json";
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    }
+    function resetCards() {
+        if (confirm("确定要重置所有卡片和记忆进度吗？")) {
+            if (confirm("再次确认：所有进度将丢失。")) {
+                cards = defaultCards.map(c => ({...c, interval: 0, due: Date.now(), rescue: false}));
+                localStorage.removeItem("ankiSM2_cards");
+                save();
+                show();
             }
         }
-        function flip() { document.getElementById('card').classList.toggle('card-flipped'); document.getElementById('controls').classList.remove('hidden'); }
-        function grade(type) {
-            let now = new Date().getTime();
-            let card = deck.find(c => c.nextReview <= now);
-            if (type === 0) card.nextReview = now + 300000;
-            else if (type === 1) card.nextReview = now + 86400000;
-            else card.nextReview = now + 86400000 * 2.5;
-            localStorage.setItem('myDeck', JSON.stringify(deck));
-            document.getElementById('card').classList.remove('card-flipped');
-            updateUI();
-        }
-        function importWord() {
-            try {
-                let data = JSON.parse(document.getElementById('import-area').value);
-                data.nextReview = new Date().getTime();
-                deck.push(data);
-                localStorage.setItem('myDeck', JSON.stringify(deck));
-                alert("导入成功！"); updateUI();
-            } catch(e) { alert("JSON 格式错误"); }
-        }
-        function exportData() {
-            const blob = new Blob([localStorage.getItem('myDeck')], {type: 'application/json'});
-            const a = document.createElement('a');
-            a.href = URL.createObjectURL(blob);
-            a.download = 'myDeck.json'; a.click();
-        }
-        updateUI();
-    </script>
+    }
+    load();
+    show();
+    setInterval(() => {
+        const due = getDueIndices();
+        if (currentIndex < 0 && due.length > 0) show();
+        document.getElementById("dueCount").textContent = due.length;
+        document.getElementById("rescueCount").textContent = rescuePool.length;
+    }, 30000);
+</script>
 </body>
 </html>
