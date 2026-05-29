@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>西语记忆魔方 v2.0</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <style>
+        .card-container { perspective: 1000px; }
+        .card-inner { transition: transform 0.6s; transform-style: preserve-3d; }
+        .card-flipped { transform: rotateY(180deg); }
+        .card-front, .card-back { backface-visibility: hidden; }
+        .card-back { transform: rotateY(180deg); }
+        .duo-btn { transition: all 0.1s ease; border-bottom: 4px solid; }
+        .duo-btn:active { border-bottom-width: 0px; transform: translateY(4px); }
+    </style>
+</head>
+<body class="bg-[#f7f7f7] font-sans flex flex-col items-center p-4 min-h-screen">
+
+    <header class="w-full max-w-md flex justify-between items-center py-4 border-b-2 border-[#e5e5e5] mb-8">
+        <span class="text-xl font-black text-[#58cc02]">🦉 西语记忆魔方</span>
+        <span class="text-sm font-bold text-[#afafaf]">待复习: <span id="count" class="text-[#ff9600]">0</span></span>
+    </header>
+
+    <main class="w-full max-w-md">
+        <div class="card-container w-full aspect-[4/3] cursor-pointer mb-6" onclick="flip()">
+            <div id="card" class="card-inner w-full h-full relative">
+                <div class="card-front absolute inset-0 bg-white border-2 border-[#e5e5e5] rounded-2xl p-6 flex flex-col justify-center items-center shadow-sm">
+                    <h2 id="f-word" class="text-3xl font-black">点击导入词汇</h2>
+                </div>
+                <div class="card-back absolute inset-0 bg-white border-2 border-[#58cc02] rounded-2xl p-6 flex flex-col justify-center items-center shadow-sm text-center">
+                    <p id="b-meaning" class="text-sm font-bold text-[#58cc02] mb-2"></p>
+                    <p id="b-example" class="italic mb-1"></p>
+                    <p id="b-trans" class="text-xs text-[#777]"></p>
+                </div>
+            </div>
+        </div>
+
+        <div id="controls" class="grid grid-cols-3 gap-2 hidden">
+            <button onclick="grade(0)" class="duo-btn bg-[#ff4b4b] border-[#b33333] text-white font-bold py-3 rounded-xl">再记</button>
+            <button onclick="grade(1)" class="duo-btn bg-[#ffc800] border-[#b89100] text-white font-bold py-3 rounded-xl">模糊</button>
+            <button onclick="grade(2)" class="duo-btn bg-[#58cc02] border-[#46a302] text-white font-bold py-3 rounded-xl">秒答</button>
+        </div>
+    </main>
+
+    <footer class="w-full max-w-md mt-10 bg-white p-4 rounded-xl border border-[#e5e5e5]">
+        <textarea id="import-area" class="w-full text-xs p-2 border rounded mb-2" placeholder="粘贴 JSON..."></textarea>
+        <button onclick="importWord()" class="w-full bg-[#1cb0f6] text-white font-bold py-2 rounded-xl">同步新词</button>
+    </footer>
+
+    <script>
+        let deck = JSON.parse(localStorage.getItem('myDeck') || '[]');
+        let currentIdx = 0;
+
+        function updateUI() {
+            const due = deck.filter(c => new Date(c.nextReview) <= new Date());
+            document.getElementById('count').innerText = due.length;
+            if (due.length > 0) {
+                const c = due[0];
+                document.getElementById('f-word').innerText = c.word;
+                document.getElementById('b-meaning').innerText = c.pos + " " + c.meaning;
+                document.getElementById('b-example').innerText = c.example;
+                document.getElementById('b-trans').innerText = c.translation;
+            } else {
+                document.getElementById('f-word').innerText = "休息一下！";
+            }
+        }
+
+        function flip() { 
+            document.getElementById('card').classList.toggle('card-flipped'); 
+            document.getElementById('controls').classList.remove('hidden');
+        }
+
+        function grade(type) {
+            let card = deck.filter(c => new Date(c.nextReview) <= new Date())[0];
+            let now = new Date();
+            if (type === 0) card.nextReview = now.getTime() + 5 * 60000;
+            else if (type === 1) card.nextReview = now.getTime() + 86400000;
+            else card.nextReview = now.getTime() + 86400000 * 2.5;
+            
+            localStorage.setItem('myDeck', JSON.stringify(deck));
+            document.getElementById('card').classList.remove('card-flipped');
+            updateUI();
+        }
+
+        function importWord() {
+            try {
+                let data = JSON.parse(document.getElementById('import-area').value);
+                data.nextReview = new Date().getTime();
+                deck.push(data);
+                localStorage.setItem('myDeck', JSON.stringify(deck));
+                alert("已加入复习库！");
+                updateUI();
+            } catch(e) { alert("JSON 格式错误"); }
+        }
+        updateUI();
+    </script>
+</body>
+</html>
