@@ -547,7 +547,7 @@
         window.speechSynthesis.speak(utterance);
     }
 
-    function rateCard(grade) {
+function rateCard(grade) {
         if (currentIndex < 0) return;
         const card = cards[currentIndex];
         const now = Date.now();
@@ -558,13 +558,24 @@
             card.due = now + 1 * 60 * 1000; // 严格封印 1 分钟
             card.rescue = true;
         } else if (grade === "hard") {
-            if (card.interval === 0) card.interval = 5;
-            card.interval = Math.round(card.interval * 1.2);
+            if (card.interval === 0) {
+                card.interval = 5;
+            } else {
+                // 修复死循环Bug：确保每次点击至少增加 1 分钟间隔
+                card.interval = Math.max(card.interval + 1, Math.round(card.interval * 1.2));
+            }
             card.due = now + card.interval * 60 * 1000;
             card.rescue = false;
         } else if (grade === "good") {
-            if (card.interval === 0) card.interval = 10;
-            card.interval = Math.round(card.interval * 2.5);
+            if (card.interval === 0) {
+                card.interval = 10;
+            } else if (card.rescue && card.interval === 1) {
+                // 修复碎步Bug：如果从急救池“秒答”成功，直接康复到 10 分钟状态
+                card.interval = 10; 
+            } else {
+                // 正常增长
+                card.interval = Math.max(card.interval + 1, Math.round(card.interval * 2.5));
+            }
             card.due = now + card.interval * 60 * 1000;
             card.rescue = false;
         }
