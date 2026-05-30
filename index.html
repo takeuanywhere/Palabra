@@ -313,18 +313,22 @@
     </div>
 </div>
 <script>
-    // ================= 移动端语音引擎强制解锁 =================
+    // ================= 移动端音频环境强制保活 =================
     let isAudioUnlocked = false;
 
     function unlockAudioEngine() {
         if (isAudioUnlocked) return;
+        
+        // Safari要求：第一次点击必须同步初始化引擎
         if ('speechSynthesis' in window) {
             const silentSpeech = new SpeechSynthesisUtterance('');
             silentSpeech.volume = 0;
             window.speechSynthesis.speak(silentSpeech);
         }
+        
         const silentAudio = new Audio('data:audio/mp3;base64,//NExAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq');
         silentAudio.play().catch(() => {});
+        
         isAudioUnlocked = true;
         document.removeEventListener('touchstart', unlockAudioEngine);
         document.removeEventListener('click', unlockAudioEngine);
@@ -386,7 +390,6 @@
         save();
     }
 
-    // 科学队列引擎核心重构
     function getDueIndices() {
         const now = Date.now();
         const dueReviews = [];
@@ -397,7 +400,6 @@
         cards.forEach((card, i) => {
             if (card.rescue) {
                 rescuePool.push(i);
-                // 强制遵守冷却期：必须超过1分钟后才能复出
                 if (card.due <= now) dueRescues.push(i);
             } 
             else if (card.interval === 0) {
@@ -411,8 +413,6 @@
         const availableNewSlots = Math.max(0, dailyNewLimit - newStudiedToday);
         const newToStudy = newCards.slice(0, availableNewSlots);
         
-        // 科学队尾插队法：正常复习旧词 -> 今日新词 -> 冷却完毕的急救词
-        // 这样可以最大程度延长急救词被遮蔽的时间
         const combined = [...dueReviews, ...newToStudy, ...dueRescues];
         return [...new Set(combined)];
     }
@@ -433,7 +433,6 @@
     function show() {
         const due = getDueIndices();
         const now = Date.now();
-        // 统计处于“被封印等待1分钟流逝”的急救卡数量
         const pendingRescues = rescuePool.filter(i => cards[i].due > now);
         
         document.getElementById("dueCount").textContent = due.length;
@@ -449,7 +448,6 @@
         const cardEl = document.getElementById("card");
         const wordEl = document.getElementById("word");
         
-        // 当没有立即可复习的词时
         if (due.length === 0) {
             cardEl.classList.remove("flipped");
             document.getElementById("pos").textContent = "";
@@ -460,13 +458,11 @@
             currentIndex = -1;
 
             if (pendingRescues.length > 0) {
-                // 冷却提示状态
                 wordEl.textContent = "⏳ 冷却中...";
                 wordEl.style.color = "var(--secondary)";
                 wordEl.style.fontSize = "28px";
                 document.getElementById("meaning").textContent = `有 ${pendingRescues.length} 个急救词汇正在等待记忆衰减，请稍作休息...`;
             } else {
-                // 彻底清空状态
                 wordEl.textContent = "🎉 任务完成";
                 wordEl.style.color = "#4a4ad0";
                 wordEl.style.fontSize = "36px";
@@ -475,7 +471,6 @@
             return;
         }
         
-        // 正常出牌逻辑
         currentIndex = due[0];
         const card = cards[currentIndex];
         
@@ -527,27 +522,46 @@
         playAudio(cards[currentIndex].word, document.getElementById("speakBtn"));
     }
 
+    // ================= 极简化 iOS 专杀版发音引擎 =================
     function playAudio(word, btn) {
-        window.speechSynthesis.cancel();
-        const utterance = new SpeechSynthesisUtterance(word);
-        utterance.lang = "es-ES";
-        utterance.rate = 0.85; 
-        
-        const voices = window.speechSynthesis.getVoices();
-        if (voices.length > 0) {
-            const bestVoice = voices.find(v => v.lang.includes("es") && (v.name.includes("Premium") || v.name.includes("Enhanced")));
-            if (bestVoice) utterance.voice = bestVoice;
+        if (btn) btn.classList.add("speaking");
+
+        try {
+            // Safari下强行切断旧语音，但不加延迟
+            window.speechSynthesis.cancel(); 
+            
+            const utterance = new SpeechSynthesisUtterance(word);
+            utterance.lang = "es-ES";
+            utterance.rate = 0.85; 
+            
+            // 兼容Safari空数组Bug，不管找没找到，都强制赋值 es-ES 触发底座语言
+            const voices = window.speechSynthesis.getVoices();
+            if (voices.length > 0) {
+                const bestVoice = voices.find(v => v.lang.includes("es") && (v.name.includes("Premium") || v.name.includes("Enhanced") || v.name.includes("Mónica") || v.name.includes("Jorge")));
+                if (bestVoice) utterance.voice = bestVoice;
+            }
+            
+            utterance.onend = () => { if (btn) btn.classList.remove("speaking"); };
+            utterance.onerror = () => { fallbackNetworkAudio(word, btn); };
+            
+            // 绝对核心：干掉所有 setTimeout 延迟，与用户点击绝对同步，绕过 Safari 拦截！
+            window.speechSynthesis.speak(utterance);
+        } catch (e) {
+            fallbackNetworkAudio(word, btn);
         }
-        
-        if(btn) {
-            btn.classList.add("speaking");
-            utterance.onend = () => btn.classList.remove("speaking");
-            utterance.onerror = () => btn.classList.remove("speaking");
-        }
-        window.speechSynthesis.speak(utterance);
     }
 
-function rateCard(grade) {
+    function fallbackNetworkAudio(word, btn) {
+        const youdaoUrl = `https://dict.youdao.com/dictvoice?audio=${encodeURIComponent(word)}&le=es`;
+        const audio = new Audio(youdaoUrl);
+        audio.play().then(() => {
+            audio.onended = () => { if (btn) btn.classList.remove("speaking"); };
+        }).catch(() => {
+            if (btn) btn.classList.remove("speaking");
+        });
+    }
+
+    function rateCard(grade) {
         if (currentIndex < 0) return;
         const card = cards[currentIndex];
         const now = Date.now();
@@ -555,13 +569,12 @@ function rateCard(grade) {
         
         if (grade === "again") {
             card.interval = 1;
-            card.due = now + 1 * 60 * 1000; // 严格封印 1 分钟
+            card.due = now + 1 * 60 * 1000;
             card.rescue = true;
         } else if (grade === "hard") {
             if (card.interval === 0) {
                 card.interval = 5;
             } else {
-                // 修复死循环Bug：确保每次点击至少增加 1 分钟间隔
                 card.interval = Math.max(card.interval + 1, Math.round(card.interval * 1.2));
             }
             card.due = now + card.interval * 60 * 1000;
@@ -570,10 +583,8 @@ function rateCard(grade) {
             if (card.interval === 0) {
                 card.interval = 10;
             } else if (card.rescue && card.interval === 1) {
-                // 修复碎步Bug：如果从急救池“秒答”成功，直接康复到 10 分钟状态
                 card.interval = 10; 
             } else {
-                // 正常增长
                 card.interval = Math.max(card.interval + 1, Math.round(card.interval * 2.5));
             }
             card.due = now + card.interval * 60 * 1000;
@@ -585,12 +596,32 @@ function rateCard(grade) {
         show();
     }
 
+    // ================= 宽容解析导入引擎 =================
     function importJSON() {
-        const raw = document.getElementById("jsonInput").value.trim();
+        let raw = document.getElementById("jsonInput").value.trim();
         if (!raw) { alert("请粘贴 JSON 代码"); return; }
+        
+        // 清理常见的排版干扰字符（全角空格、不可见字符）
+        raw = raw.replace(/[\u00A0\u1680\u180E\u2000-\u200B\u2028\u2029\u202F\u205F\u3000]/g, " ");
+        // 替换苹果智能中文引号
+        raw = raw.replace(/[“”]/g, '"').replace(/[‘’]/g, "'");
+
         let imported;
-        try { imported = JSON.parse(raw); } catch (e) { alert("JSON 格式错误，请检查"); return; }
-        if (!Array.isArray(imported)) { alert("JSON 必须是数组格式"); return; }
+        try {
+            // 先尝试标准解析
+            imported = JSON.parse(raw);
+        } catch (e) {
+            try {
+                // 如果标准解析失败，启动宽容模式（允许尾随逗号、单引号等）
+                imported = new Function("return " + raw)();
+            } catch (err) {
+                alert("导入失败：数据格式破损太严重。请确保最外层是 [ 和 ]"); 
+                return;
+            }
+        }
+        
+        if (!Array.isArray(imported)) { alert("数据必须是数组格式 [ ... ]"); return; }
+        
         let added = 0;
         const now = Date.now();
         imported.forEach(item => {
@@ -639,16 +670,13 @@ function rateCard(grade) {
     load();
     show();
 
-    // 加快轮询频率，确保冷却完毕后界面马上反应
     setInterval(() => {
         const due = getDueIndices();
         if (currentIndex < 0 && due.length > 0) show();
         
-        // 动态更新实时统计
         document.getElementById("dueCount").textContent = due.length;
         document.getElementById("rescueCount").textContent = rescuePool.length;
         
-        // 如果当前是处于等待冷却状态，自动更新提示文字的倒数计时感
         const pendingRescues = rescuePool.filter(i => cards[i].due > Date.now());
         if (currentIndex < 0 && pendingRescues.length > 0) {
             document.getElementById("meaning").textContent = `有 ${pendingRescues.length} 个急救词汇正在等待记忆衰减，请稍作休息...`;
