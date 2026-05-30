@@ -38,6 +38,7 @@
             padding: 0 8px;
         }
         .header .logo { font-size: 22px; font-weight: 800; color: var(--text); }
+        .header .controls { display: flex; gap: 8px; align-items: center; }
         .header .streak {
             background: #fff;
             border-radius: 20px;
@@ -47,6 +48,21 @@
             color: var(--secondary);
             box-shadow: 0 2px 8px rgba(255,149,0,0.12);
         }
+        .blind-toggle {
+            background: #fff;
+            border-radius: 20px;
+            padding: 6px 12px;
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--text);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            cursor: pointer;
+            user-select: none;
+        }
+        .blind-toggle input { cursor: pointer; }
         .progress-bar {
             width: 100%;
             height: 8px;
@@ -194,12 +210,12 @@
         .stats {
             text-align: center;
             color: var(--sub);
-            font-size: 13px;
+            font-size: 12px;
             margin-top: 14px;
-            font-weight: 600;
+            font-weight: 700;
             display: flex;
             justify-content: center;
-            gap: 16px;
+            gap: 12px;
             flex-wrap: wrap;
         }
         .import-section {
@@ -253,7 +269,12 @@
 <div class="container">
     <div class="header">
         <div class="logo">🇪🇸 西语小卡片</div>
-        <div class="streak">🔥 <span id="streakCount">1</span> 天</div>
+        <div class="controls">
+            <label class="blind-toggle">
+                <input type="checkbox" id="blindModeToggle" onchange="toggleBlindMode()"> 🎧 盲抽
+            </label>
+            <div class="streak">🔥 <span id="streakCount">1</span> 天</div>
+        </div>
     </div>
     <div class="progress-bar">
         <div class="progress-fill" id="progressFill" style="width: 0%;"></div>
@@ -276,12 +297,13 @@
         <button class="btn-good" onclick="rateCard('good')">🟢 秒答</button>
     </div>
     <div class="stats">
-        <span>📚 待复习: <span id="dueCount">0</span></span>
-        <span>📝 总计: <span id="totalCount">0</span></span>
+        <span>📚 复习: <span id="dueCount">0</span></span>
+        <span>🌱 新词: <span id="newTodayCount" style="color:var(--primary)">0</span>/<span id="dailyLimitText">40</span></span>
         <span>🚑 急救: <span id="rescueCount">0</span></span>
+        <span>📝 总计: <span id="totalCount">0</span></span>
     </div>
     <div class="import-section">
-        <h3>📥 导入今日单词 (JSON)</h3>
+        <h3>📥 导入生词库 (JSON)</h3>
         <textarea id="jsonInput" placeholder='粘贴 JSON 代码'></textarea>
         <div class="import-row">
             <button class="btn-import" onclick="importJSON()">📥 导入并合并</button>
@@ -296,43 +318,43 @@
 
     function unlockAudioEngine() {
         if (isAudioUnlocked) return;
-        
-        // 唤醒内置 TTS 引擎
         if ('speechSynthesis' in window) {
             const silentSpeech = new SpeechSynthesisUtterance('');
             silentSpeech.volume = 0;
             window.speechSynthesis.speak(silentSpeech);
         }
-
-        // 唤醒 HTML5 Audio 引擎
         const silentAudio = new Audio('data:audio/mp3;base64,//NExAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq');
         silentAudio.play().catch(() => {});
-
         isAudioUnlocked = true;
         document.removeEventListener('touchstart', unlockAudioEngine);
         document.removeEventListener('click', unlockAudioEngine);
     }
-
     document.addEventListener('touchstart', unlockAudioEngine, { once: true });
     document.addEventListener('click', unlockAudioEngine, { once: true });
-    // ==========================================================
 
-    const defaultCards = [
-        { word: "abierta", pos: "adj. / p.p.", meaning: "开着的", example: "La puerta está abierta." },
-        { word: "cansado", pos: "adj. / p.p.", meaning: "累的", example: "Estoy muy cansado." },
-        { word: "puerta", pos: "f.", meaning: "门", example: "Cierra la puerta." },
-        { word: "cielo", pos: "m.", meaning: "天空", example: "El cielo está azul." },
-        { word: "gato", pos: "m.", meaning: "猫", example: "Tengo dos gatos." },
-    ];
+    // ================= 核心逻辑 =================
+    const defaultCards = [];
     let cards = [];
     let currentIndex = 0;
     let streakDays = 1;
     let rescuePool = [];
+    let isBlindMode = false;
+    const dailyNewLimit = 40; 
+    let newStudiedToday = 0;
+
+    function toggleBlindMode() {
+        isBlindMode = document.getElementById('blindModeToggle').checked;
+        localStorage.setItem("ankiSM2_blindMode", isBlindMode);
+        if(currentIndex >= 0) {
+            renderCardContent(cards[currentIndex], document.getElementById("card").classList.contains("flipped"));
+        }
+    }
 
     function save() {
         localStorage.setItem("ankiSM2_cards", JSON.stringify(cards));
         localStorage.setItem("ankiSM2_streakDays", streakDays);
         localStorage.setItem("ankiSM2_lastDate", new Date().toDateString());
+        localStorage.setItem("ankiSM2_newToday", newStudiedToday);
     }
 
     function load() {
@@ -340,84 +362,138 @@
         if (saved) {
             const parsed = JSON.parse(saved);
             if (parsed.length > 0) cards = parsed;
-            else cards = defaultCards.map(c => ({...c, interval: 0, due: Date.now(), rescue: false}));
-        } else {
-            cards = defaultCards.map(c => ({...c, interval: 0, due: Date.now(), rescue: false}));
         }
+        
         streakDays = parseInt(localStorage.getItem("ankiSM2_streakDays")) || 1;
+        newStudiedToday = parseInt(localStorage.getItem("ankiSM2_newToday")) || 0;
+        isBlindMode = localStorage.getItem("ankiSM2_blindMode") === "true";
+        document.getElementById('blindModeToggle').checked = isBlindMode;
+        
         const last = localStorage.getItem("ankiSM2_lastDate");
         const today = new Date().toDateString();
         if (last && last !== today) {
+            newStudiedToday = 0;
             const yesterday = new Date(Date.now() - 86400000).toDateString();
             if (last === yesterday) streakDays++;
             else streakDays = 1;
         }
-        if (!last) streakDays = 1;
+        if (!last) {
+            streakDays = 1;
+            newStudiedToday = 0;
+        }
+        
+        document.getElementById("dailyLimitText").textContent = dailyNewLimit;
         save();
     }
 
+    // 科学队列引擎核心重构
     function getDueIndices() {
         const now = Date.now();
-        const due = [];
+        const dueReviews = [];
+        const newCards = [];
+        const dueRescues = [];
         rescuePool = [];
         
         cards.forEach((card, i) => {
             if (card.rescue) {
-                rescuePool.push(i); 
-            }
-            if (card.due <= now) {
-                due.push(i);
+                rescuePool.push(i);
+                // 强制遵守冷却期：必须超过1分钟后才能复出
+                if (card.due <= now) dueRescues.push(i);
+            } 
+            else if (card.interval === 0) {
+                newCards.push(i);
+            } 
+            else if (card.due <= now) {
+                dueReviews.push(i);
             }
         });
         
-        if (due.length === 0 && rescuePool.length > 0) {
-            return rescuePool; 
-        }
+        const availableNewSlots = Math.max(0, dailyNewLimit - newStudiedToday);
+        const newToStudy = newCards.slice(0, availableNewSlots);
         
-        return due;
+        // 科学队尾插队法：正常复习旧词 -> 今日新词 -> 冷却完毕的急救词
+        // 这样可以最大程度延长急救词被遮蔽的时间
+        const combined = [...dueReviews, ...newToStudy, ...dueRescues];
+        return [...new Set(combined)];
+    }
+
+    function renderCardContent(card, isFlipped) {
+        const wordEl = document.getElementById("word");
+        if (!isFlipped && isBlindMode) {
+            wordEl.textContent = "🎧 听音辨意...";
+            wordEl.style.color = "var(--sub)";
+            wordEl.style.fontSize = "26px";
+        } else {
+            wordEl.textContent = card.word;
+            wordEl.style.color = "#4a4ad0";
+            wordEl.style.fontSize = isFlipped ? "26px" : "36px";
+        }
     }
 
     function show() {
         const due = getDueIndices();
+        const now = Date.now();
+        // 统计处于“被封印等待1分钟流逝”的急救卡数量
+        const pendingRescues = rescuePool.filter(i => cards[i].due > now);
+        
         document.getElementById("dueCount").textContent = due.length;
         document.getElementById("totalCount").textContent = cards.length;
         document.getElementById("rescueCount").textContent = rescuePool.length;
         document.getElementById("streakCount").textContent = streakDays;
-        const total = cards.length;
-        const reviewed = total > 0 ? cards.filter(c => c.interval > 0).length : 0;
-        const pct = total > 0 ? Math.round((reviewed / total) * 100) : 0;
+        document.getElementById("newTodayCount").textContent = newStudiedToday;
+        
+        const reviewed = cards.length > 0 ? cards.filter(c => c.interval > 0).length : 0;
+        const pct = cards.length > 0 ? Math.round((reviewed / cards.length) * 100) : 0;
         document.getElementById("progressFill").style.width = pct + "%";
+        
+        const cardEl = document.getElementById("card");
+        const wordEl = document.getElementById("word");
+        
+        // 当没有立即可复习的词时
         if (due.length === 0) {
-            document.getElementById("word").textContent = "🎉 暂无待复习";
+            cardEl.classList.remove("flipped");
             document.getElementById("pos").textContent = "";
-            document.getElementById("meaning").textContent = "";
             document.getElementById("example").textContent = "";
             document.getElementById("intervalBadge").textContent = "";
-            document.getElementById("card").classList.remove("flipped");
             document.getElementById("speakBtn").style.display = "none";
             document.getElementById("buttons").classList.remove("visible");
             currentIndex = -1;
+
+            if (pendingRescues.length > 0) {
+                // 冷却提示状态
+                wordEl.textContent = "⏳ 冷却中...";
+                wordEl.style.color = "var(--secondary)";
+                wordEl.style.fontSize = "28px";
+                document.getElementById("meaning").textContent = `有 ${pendingRescues.length} 个急救词汇正在等待记忆衰减，请稍作休息...`;
+            } else {
+                // 彻底清空状态
+                wordEl.textContent = "🎉 任务完成";
+                wordEl.style.color = "#4a4ad0";
+                wordEl.style.fontSize = "36px";
+                document.getElementById("meaning").textContent = "今日词汇已完全掌握";
+            }
             return;
         }
+        
+        // 正常出牌逻辑
         currentIndex = due[0];
         const card = cards[currentIndex];
-        document.getElementById("word").textContent = card.word;
+        
+        cardEl.classList.remove("flipped");
+        renderCardContent(card, false);
+        
         document.getElementById("pos").textContent = card.pos || "";
         document.getElementById("meaning").textContent = card.meaning;
         document.getElementById("example").textContent = card.example || "";
-        document.getElementById("card").classList.remove("flipped");
+        
         document.getElementById("speakBtn").style.display = "inline-flex";
         document.getElementById("buttons").classList.remove("visible");
         
-        if (card.rescue) {
-            document.getElementById("intervalBadge").textContent = "🚑 急救";
-        } else if (card.interval < 60) {
-            document.getElementById("intervalBadge").textContent = card.interval + "分钟";
-        } else if (card.interval < 1440) {
-            document.getElementById("intervalBadge").textContent = Math.round(card.interval / 60) + "小时";
-        } else {
-            document.getElementById("intervalBadge").textContent = Math.round(card.interval / 1440) + "天";
-        }
+        if (card.rescue) document.getElementById("intervalBadge").textContent = "🚑 急救";
+        else if (card.interval === 0) document.getElementById("intervalBadge").textContent = "🌱 新词";
+        else if (card.interval < 60) document.getElementById("intervalBadge").textContent = card.interval + "分钟";
+        else if (card.interval < 1440) document.getElementById("intervalBadge").textContent = Math.round(card.interval / 60) + "小时";
+        else document.getElementById("intervalBadge").textContent = Math.round(card.interval / 1440) + "天";
         
         document.getElementById("cardWrapper").classList.remove("slide-up");
         void document.getElementById("cardWrapper").offsetWidth;
@@ -427,33 +503,32 @@
     }
 
     function flipCard() {
-        const card = document.getElementById("card");
-        card.classList.toggle("flipped");
-        if (card.classList.contains("flipped")) {
+        if (currentIndex < 0) return;
+        const cardEl = document.getElementById("card");
+        cardEl.classList.toggle("flipped");
+        const isFlipped = cardEl.classList.contains("flipped");
+        
+        if (isFlipped) {
             document.getElementById("buttons").classList.add("visible");
         } else {
             document.getElementById("buttons").classList.remove("visible");
         }
+        renderCardContent(cards[currentIndex], isFlipped);
     }
 
     function speakWord(event) {
         event.stopPropagation();
         if (currentIndex < 0) return;
-        const word = cards[currentIndex].word;
-        const btn = document.getElementById("speakBtn");
-        playAudio(word, btn);
+        playAudio(cards[currentIndex].word, document.getElementById("speakBtn"));
     }
 
     function speakWordAuto() {
         if (currentIndex < 0) return;
-        const word = cards[currentIndex].word;
-        const btn = document.getElementById("speakBtn");
-        playAudio(word, btn);
+        playAudio(cards[currentIndex].word, document.getElementById("speakBtn"));
     }
 
     function playAudio(word, btn) {
         window.speechSynthesis.cancel();
-        
         const utterance = new SpeechSynthesisUtterance(word);
         utterance.lang = "es-ES";
         utterance.rate = 0.85; 
@@ -464,10 +539,11 @@
             if (bestVoice) utterance.voice = bestVoice;
         }
         
-        btn.classList.add("speaking");
-        utterance.onend = () => btn.classList.remove("speaking");
-        utterance.onerror = () => btn.classList.remove("speaking");
-        
+        if(btn) {
+            btn.classList.add("speaking");
+            utterance.onend = () => btn.classList.remove("speaking");
+            utterance.onerror = () => btn.classList.remove("speaking");
+        }
         window.speechSynthesis.speak(utterance);
     }
 
@@ -475,10 +551,11 @@
         if (currentIndex < 0) return;
         const card = cards[currentIndex];
         const now = Date.now();
+        const wasNew = (card.interval === 0);
         
         if (grade === "again") {
             card.interval = 1;
-            card.due = now + 1 * 60 * 1000;
+            card.due = now + 1 * 60 * 1000; // 严格封印 1 分钟
             card.rescue = true;
         } else if (grade === "hard") {
             if (card.interval === 0) card.interval = 5;
@@ -492,6 +569,7 @@
             card.rescue = false;
         }
         
+        if (wasNew) newStudiedToday++;
         save();
         show();
     }
@@ -509,37 +587,25 @@
             const exists = cards.some(c => c.word.toLowerCase() === item.word.toLowerCase());
             if (exists) return;
             cards.push({
-                word: item.word,
-                pos: item.pos || "",
-                meaning: item.meaning,
-                example: item.example || "",
-                interval: 0,
-                due: now,
-                rescue: false
+                word: item.word, pos: item.pos || "", meaning: item.meaning,
+                example: item.example || "", interval: 0, due: now, rescue: false
             });
             added++;
         });
         save();
         show();
         document.getElementById("jsonInput").value = "";
-        alert("已导入 " + added + " 个新单词");
+        alert("已存入 " + added + " 个新词。全职额度：每日 40 词。");
     }
 
     function downloadBackup() {
         const exportData = cards.map(c => ({
-            word: c.word,
-            pos: c.pos,
-            meaning: c.meaning,
-            example: c.example,
-            interval: c.interval,
-            due: c.due,
-            rescue: c.rescue
+            word: c.word, pos: c.pos, meaning: c.meaning, example: c.example,
+            interval: c.interval, due: c.due, rescue: c.rescue
         }));
-        const jsonStr = JSON.stringify(exportData, null, 2);
-        const blob = new Blob([jsonStr], { type: "application/json" });
-        const url = URL.createObjectURL(blob);
+        const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" });
         const a = document.createElement("a");
-        a.href = url;
+        a.href = URL.createObjectURL(blob);
         a.download = "西语卡片备份_" + new Date().toISOString().slice(0,10) + ".json";
         document.body.appendChild(a);
         a.click();
@@ -552,6 +618,7 @@
             if (confirm("再次确认：所有进度将丢失。")) {
                 cards = defaultCards.map(c => ({...c, interval: 0, due: Date.now(), rescue: false}));
                 localStorage.removeItem("ankiSM2_cards");
+                localStorage.removeItem("ankiSM2_newToday");
                 save();
                 show();
             }
@@ -561,12 +628,23 @@
     load();
     show();
 
+    // 加快轮询频率，确保冷却完毕后界面马上反应
     setInterval(() => {
         const due = getDueIndices();
         if (currentIndex < 0 && due.length > 0) show();
+        
+        // 动态更新实时统计
         document.getElementById("dueCount").textContent = due.length;
         document.getElementById("rescueCount").textContent = rescuePool.length;
-    }, 30000);
+        
+        // 如果当前是处于等待冷却状态，自动更新提示文字的倒数计时感
+        const pendingRescues = rescuePool.filter(i => cards[i].due > Date.now());
+        if (currentIndex < 0 && pendingRescues.length > 0) {
+            document.getElementById("meaning").textContent = `有 ${pendingRescues.length} 个急救词汇正在等待记忆衰减，请稍作休息...`;
+        } else if (currentIndex < 0 && due.length === 0) {
+            document.getElementById("meaning").textContent = "今日词汇已完全掌握";
+        }
+    }, 5000); 
 </script>
 </body>
 </html>
