@@ -640,14 +640,15 @@
         alert("已存入 " + added + " 个新词。全职额度：每日 40 词。");
     }
 
-    function downloadBackup() {
+function downloadBackup() {
         const exportData = cards.map(c => ({
             word: c.word, pos: c.pos, meaning: c.meaning, example: c.example,
             interval: c.interval, due: c.due, rescue: c.rescue
         }));
         const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
-        a.href = URL.createObjectURL(blob);
+        a.href = url;
         a.download = "西语卡片备份_" + new Date().toISOString().slice(0,10) + ".json";
         document.body.appendChild(a);
         a.click();
