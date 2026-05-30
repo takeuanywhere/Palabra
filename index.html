@@ -291,6 +291,32 @@
     </div>
 </div>
 <script>
+    // ================= 移动端语音引擎强制解锁 =================
+    let isAudioUnlocked = false;
+
+    function unlockAudioEngine() {
+        if (isAudioUnlocked) return;
+        
+        // 唤醒内置 TTS 引擎
+        if ('speechSynthesis' in window) {
+            const silentSpeech = new SpeechSynthesisUtterance('');
+            silentSpeech.volume = 0;
+            window.speechSynthesis.speak(silentSpeech);
+        }
+
+        // 唤醒 HTML5 Audio 引擎
+        const silentAudio = new Audio('data:audio/mp3;base64,//NExAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq');
+        silentAudio.play().catch(() => {});
+
+        isAudioUnlocked = true;
+        document.removeEventListener('touchstart', unlockAudioEngine);
+        document.removeEventListener('click', unlockAudioEngine);
+    }
+
+    document.addEventListener('touchstart', unlockAudioEngine, { once: true });
+    document.addEventListener('click', unlockAudioEngine, { once: true });
+    // ==========================================================
+
     const defaultCards = [
         { word: "abierta", pos: "adj. / p.p.", meaning: "开着的", example: "La puerta está abierta." },
         { word: "cansado", pos: "adj. / p.p.", meaning: "累的", example: "Estoy muy cansado." },
@@ -302,11 +328,13 @@
     let currentIndex = 0;
     let streakDays = 1;
     let rescuePool = [];
+
     function save() {
         localStorage.setItem("ankiSM2_cards", JSON.stringify(cards));
         localStorage.setItem("ankiSM2_streakDays", streakDays);
         localStorage.setItem("ankiSM2_lastDate", new Date().toDateString());
     }
+
     function load() {
         const saved = localStorage.getItem("ankiSM2_cards");
         if (saved) {
@@ -327,18 +355,28 @@
         if (!last) streakDays = 1;
         save();
     }
+
     function getDueIndices() {
         const now = Date.now();
         const due = [];
         rescuePool = [];
+        
         cards.forEach((card, i) => {
+            if (card.rescue) {
+                rescuePool.push(i); 
+            }
             if (card.due <= now) {
-                if (card.rescue) rescuePool.push(i);
                 due.push(i);
             }
         });
+        
+        if (due.length === 0 && rescuePool.length > 0) {
+            return rescuePool; 
+        }
+        
         return due;
     }
+
     function show() {
         const due = getDueIndices();
         document.getElementById("dueCount").textContent = due.length;
@@ -370,6 +408,7 @@
         document.getElementById("card").classList.remove("flipped");
         document.getElementById("speakBtn").style.display = "inline-flex";
         document.getElementById("buttons").classList.remove("visible");
+        
         if (card.rescue) {
             document.getElementById("intervalBadge").textContent = "🚑 急救";
         } else if (card.interval < 60) {
@@ -379,12 +418,14 @@
         } else {
             document.getElementById("intervalBadge").textContent = Math.round(card.interval / 1440) + "天";
         }
+        
         document.getElementById("cardWrapper").classList.remove("slide-up");
         void document.getElementById("cardWrapper").offsetWidth;
         document.getElementById("cardWrapper").classList.add("slide-up");
         
         speakWordAuto();
     }
+
     function flipCard() {
         const card = document.getElementById("card");
         card.classList.toggle("flipped");
@@ -411,28 +452,33 @@
     }
 
     function playAudio(word, btn) {
-        const baiduUrl = `https://fanyi.baidu.com/gettts?lan=es&text=${encodeURIComponent(word)}&spd=3&source=web`;
-        const audio = new Audio(baiduUrl);
+        window.speechSynthesis.cancel();
+        
+        const utterance = new SpeechSynthesisUtterance(word);
+        utterance.lang = "es-ES";
+        utterance.rate = 0.85; 
+        
+        const voices = window.speechSynthesis.getVoices();
+        if (voices.length > 0) {
+            const bestVoice = voices.find(v => v.lang.includes("es") && (v.name.includes("Premium") || v.name.includes("Enhanced")));
+            if (bestVoice) utterance.voice = bestVoice;
+        }
+        
         btn.classList.add("speaking");
-        audio.play();
-        audio.onended = () => btn.classList.remove("speaking");
-        audio.onerror = () => {
-            btn.classList.remove("speaking");
-            const youdaoUrl = `https://dict.youdao.com/dictvoice?audio=${encodeURIComponent(word)}&le=es`;
-            const audio2 = new Audio(youdaoUrl);
-            audio2.play();
-            audio2.onended = () => btn.classList.remove("speaking");
-            audio2.onerror = () => btn.classList.remove("speaking");
-        };
+        utterance.onend = () => btn.classList.remove("speaking");
+        utterance.onerror = () => btn.classList.remove("speaking");
+        
+        window.speechSynthesis.speak(utterance);
     }
 
     function rateCard(grade) {
         if (currentIndex < 0) return;
         const card = cards[currentIndex];
         const now = Date.now();
+        
         if (grade === "again") {
-            card.interval = 5;
-            card.due = now + 5 * 60 * 1000;
+            card.interval = 1;
+            card.due = now + 1 * 60 * 1000;
             card.rescue = true;
         } else if (grade === "hard") {
             if (card.interval === 0) card.interval = 5;
@@ -445,9 +491,11 @@
             card.due = now + card.interval * 60 * 1000;
             card.rescue = false;
         }
+        
         save();
         show();
     }
+
     function importJSON() {
         const raw = document.getElementById("jsonInput").value.trim();
         if (!raw) { alert("请粘贴 JSON 代码"); return; }
@@ -476,6 +524,7 @@
         document.getElementById("jsonInput").value = "";
         alert("已导入 " + added + " 个新单词");
     }
+
     function downloadBackup() {
         const exportData = cards.map(c => ({
             word: c.word,
@@ -497,6 +546,7 @@
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
     }
+
     function resetCards() {
         if (confirm("确定要重置所有卡片和记忆进度吗？")) {
             if (confirm("再次确认：所有进度将丢失。")) {
@@ -507,8 +557,10 @@
             }
         }
     }
+
     load();
     show();
+
     setInterval(() => {
         const due = getDueIndices();
         if (currentIndex < 0 && due.length > 0) show();
